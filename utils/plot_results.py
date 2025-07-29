@@ -6,21 +6,27 @@ import pickle
 import glob
 from collections import defaultdict
 import pandas as pd
+'''
+2025-06-30
+changed Att to Att.
+changed linear Att to Attention
 
+
+'''
 extra_font = 40  # Font size adjustment
 line_minus=0
-ylable_text="Att Mechanism"
+ylable_text="Att. Mechanism"
 ylable_text=''
 label_map = {
-    "ScaledDotProductAttention": "Scaled Dot Product Att",
-    "BaselineAttention": "Baseline Att",
-    # "MultiHeadFlexAttention": "Multi-Head Flex Att",  # Hidden
-    "LinearFlexAttention": "Linear Att",
-    "LSHAttention": "LSH Att",
-    "SlidingWindowAttention": "Sliding Window Att",
-    "GroupQueryAttention": "Group Query Att",
-    "FlashAttention": "Flash Att",
-    "MultiHeadLatentAttention": "Multi-Head Latent Att",
+    "ScaledDotProductAttention": "Scaled Dot-Product Att.",
+    "BaselineAttention": "Baseline Att.",
+    # "MultiHeadFlexAttention": "Multi-Head Flex Att.",  # Hidden
+    "LinearFlexAttention": "Linear Att.",
+    "LSHAttention": "LSH Att.",
+    "SlidingWindowAttention": "Sliding Window Att.",
+    "GroupQueryAttention": "Group Query Att.",
+    "FlashAttention": "Flash Att.",
+    "MultiHeadLatentAttention": "Multi-Head Latent Att.",
     "cpu_percent": "CPU Percentage",
     "cpu_usage": "CPU Usage",
     "cpu_power": "CPU Power",
@@ -36,6 +42,86 @@ label_map = {
     "training_time": "Training Time",
     "loss": "Loss"
 }
+
+# Separate label map for line plots (using full "Attention" names)
+line_plot_label_map = {
+    "ScaledDotProductAttention": "Scaled Dot-Product Attention",
+    "BaselineAttention": "Baseline Attention",
+    # "MultiHeadFlexAttention": "Multi-Head Flex Attention",  # Hidden
+    "LinearFlexAttention": "Linear Attention",
+    "LSHAttention": "LSH Attention",
+    "SlidingWindowAttention": "Sliding Window Attention",
+    "GroupQueryAttention": "Group Query Attention",
+    "FlashAttention": "Flash Attention",
+    "MultiHeadLatentAttention": "Multi-Head Latent Attention",
+}
+
+
+def plot_result(results_dict, save_path="plots"):
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    grouped_results = {}
+    for key, value in results_dict.items():
+        model_name = key[0]
+        metric_name = key[1]
+        unit = key[2]
+
+        if (metric_name, unit) not in grouped_results:
+            grouped_results[(metric_name, unit)] = {}
+        grouped_results[(metric_name, unit)][model_name] = value
+
+    for (metric_name, unit), models_data in grouped_results.items():
+        if metric_name in ["FLOPS", "gpu_memory", "model_size"]:
+            attention_names = []
+            values = []
+
+            for model_name, data in models_data.items():
+                wrapped_label = "\n".join(model_name.split())
+                attention_names.append(wrapped_label)
+
+                if metric_name == "FLOPS":
+                    avg_value = data["FLOPS"].mean()
+                elif metric_name == "model_size":
+                    avg_value = data["Model size"].values[0]
+                else:
+                    avg_value = data.iloc[:, 1].mean()
+                values.append(avg_value)
+
+            plt.figure(figsize=(12, 8))
+            plt.bar(attention_names, values, color="skyblue")
+            plt.title(f"Comparison of {metric_name}", fontsize=16)
+            plt.xlabel("Attention Mechanism", fontsize=14)
+            plt.ylabel(f"{metric_name} ({unit})", fontsize=14)
+            plt.grid(axis="y")
+
+            plt.xticks(rotation=60, ha="right", fontsize=12)
+
+            filename = f"{metric_name.replace(' ', '_')}_{unit}_bar.png"
+            filepath = os.path.join(save_path, filename)
+            plt.savefig(filepath, bbox_inches="tight")
+            plt.close()
+
+
+        else:
+            plt.figure(figsize=(12, 8))
+
+            for model_name, data in models_data.items():
+                x = data["Epoch"]
+                y = data.iloc[:, 1]
+                plt.plot(x, y, marker='o', linestyle='-', label=model_name)
+
+            plt.title(f"Comparison of {metric_name}", fontsize=16)
+            plt.xlabel("Epoch", fontsize=14)
+            plt.ylabel(f"{metric_name} ({unit})", fontsize=14)
+            plt.grid(True)
+            plt.legend(fontsize=12)
+
+            filename = f"{metric_name.replace(' ', '_')}_{unit}.png"
+            filepath = os.path.join(save_path, filename)
+            plt.savefig(filepath, bbox_inches="tight")
+            plt.close()
+
 
 def merge_results(results_list):
     merged = defaultdict(lambda: defaultdict(list))
@@ -64,7 +150,7 @@ def merge_results(results_list):
 
     return merged_dict
 
-def plot_result(results_dict, save_path="plots"):
+def plot_result_all(results_dict, save_path="plots"):
     import matplotlib.ticker as ticker
 
     if not os.path.exists(save_path):
@@ -104,19 +190,31 @@ def plot_result(results_dict, save_path="plots"):
 
                 x = data.iloc[:, 0]
                 y = data.iloc[:, 1]
+                # Use line plot label map for full attention names
+                label = line_plot_label_map.get(model_name, label_map.get(model_name, model_name))
                 # Increase line thickness
                 plt.plot(x, y, marker='o', linestyle='-', linewidth=4, markersize=6,
-                         label=label_map.get(model_name, model_name))
+                         label=label)
 
             pretty_metric = label_map.get(metric_name, metric_name)
-            plt.text(
-                0.5, 1.08,  # x=0.5 center, y>1 above the plot
-                f"{pretty_metric} ({unit})",
-                fontsize=-1 + extra_font//2.5 * 2,  # Reduce by 5 more: from 4 to -1
-                ha='center',
-                va='bottom',
-                transform=plt.gca().transAxes
-            )
+            if metric_name == "loss":
+                plt.text(
+                    0.5, 1.08,  # x=0.5 center, y>1 above the plot
+                    f"{pretty_metric}",
+                    fontsize=-1 + extra_font//2.5 * 2,  # Reduce by 5 more: from 4 to -1
+                    ha='center',
+                    va='bottom',
+                    transform=plt.gca().transAxes
+                )
+            else:
+                plt.text(
+                    0.5, 1.08,  # x=0.5 center, y>1 above the plot
+                    f"{pretty_metric} ({unit})",
+                    fontsize=-1 + extra_font//2.5 * 2,  # Reduce by 5 more: from 4 to -1
+                    ha='center',
+                    va='bottom',
+                    transform=plt.gca().transAxes
+                )
 
             plt.xlabel("Epoch", fontsize=-1 + extra_font//2.5 * 2)  # Reduce by 5 more: from 4 to -1
             plt.xlim(1, 20)
@@ -236,7 +334,7 @@ def plot_result(results_dict, save_path="plots"):
             plt.savefig(filepath, bbox_inches="tight")
             plt.close()
 
-def plot_energy_product(results_dict, save_path="plots"):
+def plot_energy_product_all(results_dict, save_path="plots"):
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
@@ -350,15 +448,30 @@ def plot_energy_product(results_dict, save_path="plots"):
 
 def main():
     all_results = []
-    for pkl_file in glob.glob("pkl/*.pkl"):
-        with open(pkl_file, "rb") as f:
-            results_dict = pickle.load(f)
-            all_results.append(results_dict)
+
+
+    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+    pattern = os.path.join(base_path, "results", "**", "*.pkl")
+
+    print(f"Looking for files with pattern: {pattern}")
+
+    for pkl_file in glob.glob(pattern):
+        try:
+            with open(pkl_file, "rb") as f:
+                results_dict = pickle.load(f)
+                all_results.append(results_dict)
+        except Exception as e:
+            print(f"Error loading {pkl_file}: {e}")
+
+    print(f"Found {len(all_results)} pkl files")
 
     merged_results = merge_results(all_results)
 
-    plot_result(merged_results)
-    plot_energy_product(merged_results)
+
+    plot_result_all(merged_results)
+    plot_energy_product_all(merged_results)
 
 if __name__ == "__main__":
     main()
